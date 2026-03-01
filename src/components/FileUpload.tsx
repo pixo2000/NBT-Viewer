@@ -2,13 +2,18 @@
 
 import { useCallback, useState } from "react";
 import { fetchPlayerUUID } from "@/lib/apis";
+import WorldLoader from "@/components/WorldLoader";
 
 interface FileUploadProps {
   onFileParsed: (buffer: ArrayBuffer, fileName: string) => void;
   isLoading: boolean;
+  onWorldPlayerSelect: (datFile: File | null, statsFile: File | null) => void;
 }
 
-export default function FileUpload({ onFileParsed, isLoading }: FileUploadProps) {
+type UploadMode = "single" | "world";
+
+export default function FileUpload({ onFileParsed, isLoading, onWorldPlayerSelect }: FileUploadProps) {
+  const [uploadMode, setUploadMode] = useState<UploadMode>("single");
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,7 +101,30 @@ export default function FileUpload({ onFileParsed, isLoading }: FileUploadProps)
         </p>
       </div>
 
-      {/* UUID Lookup */}
+      {/* Mode tabs */}
+      <div className="mb-8 flex gap-1 rounded-xl border border-gray-800 bg-gray-900/60 p-1">
+        {(["single", "world"] as UploadMode[]).map((m) => (
+          <button
+            key={m}
+            onClick={() => setUploadMode(m)}
+            className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+              uploadMode === m
+                ? "bg-gray-700 text-white shadow"
+                : "text-gray-500 hover:text-gray-300"
+            }`}
+          >
+            {m === "single" ? "📄 Single File" : "🌍 World Folder"}
+          </button>
+        ))}
+      </div>
+
+      {/* World Folder mode */}
+      {uploadMode === "world" && (
+        <WorldLoader onSelectPlayer={onWorldPlayerSelect} />
+      )}
+
+      {/* UUID Lookup — only in single-file mode */}
+      {uploadMode === "single" && (
       <div className="mb-8 w-full max-w-xl rounded-2xl border border-gray-800 bg-gray-900/60 p-5">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
           🔍 Player Name → UUID
@@ -143,12 +171,15 @@ export default function FileUpload({ onFileParsed, isLoading }: FileUploadProps)
           </div>
         )}
       </div>
+      )}
 
-      {/* Drop zone */}
-      <div
-        className={`drop-zone relative w-full max-w-xl cursor-pointer rounded-2xl p-10 text-center transition-all duration-200 ${
-          isDragging ? "active" : ""
-        }`}
+      {/* Drop zone — only in single-file mode */}
+      {uploadMode === "single" && (
+        <>
+        <div
+          className={`drop-zone relative w-full max-w-xl cursor-pointer rounded-2xl p-10 text-center transition-all duration-200 ${
+            isDragging ? "active" : ""
+          }`}
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragging(true);
@@ -202,6 +233,8 @@ export default function FileUpload({ onFileParsed, isLoading }: FileUploadProps)
           <span>⚠️</span>
           <p className="text-sm">{error}</p>
         </div>
+      )}
+        </>
       )}
 
       {/* Feature hints */}

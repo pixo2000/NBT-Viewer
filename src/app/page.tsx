@@ -9,12 +9,14 @@ import InventoryGrid from "@/components/InventoryGrid";
 import LocationCard from "@/components/LocationCard";
 import EffectsPanel from "@/components/EffectsPanel";
 import AbilitiesCard from "@/components/AbilitiesCard";
+import StatsPanel, { StatsUploadButton, PlayerStats, parseStatsJSON } from "@/components/StatsPanel";
 
 export default function Home() {
   const [player, setPlayer] = useState<PlayerData | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [playerStats, setPlayerStats] = useState<PlayerStats | null>(null);
 
   const handleFileParsed = useCallback(
     async (buffer: ArrayBuffer, name: string) => {
@@ -37,10 +39,46 @@ export default function Home() {
     []
   );
 
-  if (!player) {
+  const handleWorldPlayerSelect = useCallback(
+    async (datFile: File | null, statsFile: File | null) => {
+      setIsLoading(true);
+      setError(null);
+      setPlayer(null);
+      setPlayerStats(null);
+      try {
+        if (datFile) {
+          const buffer = await datFile.arrayBuffer();
+          const nbt = await parseNBT(buffer);
+          const data = extractPlayerData(nbt);
+          setPlayer(data);
+          setFileName(datFile.name);
+        }
+        if (statsFile) {
+          const text = await statsFile.text();
+          const json = JSON.parse(text);
+          setPlayerStats(parseStatsJSON(json));
+          // If there's no .dat file, still navigate to the stats view
+          if (!datFile) setFileName(statsFile.name);
+        }
+      } catch (e) {
+        setError(
+          `Failed to load player: ${e instanceof Error ? e.message : String(e)}`
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
+
+  if (!player && !playerStats) {
     return (
       <>
-        <FileUpload onFileParsed={handleFileParsed} isLoading={isLoading} />
+        <FileUpload
+          onFileParsed={handleFileParsed}
+          isLoading={isLoading}
+          onWorldPlayerSelect={handleWorldPlayerSelect}
+        />
         {error && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-lg border border-red-800 bg-red-950 px-5 py-3 text-sm text-red-400 shadow-xl">
             ⚠️ {error}
@@ -62,16 +100,20 @@ export default function Home() {
               <p className="text-xs text-gray-500 truncate max-w-[200px] sm:max-w-none">{fileName}</p>
             </div>
           </div>
-          <button
-            onClick={() => {
-              setPlayer(null);
-              setFileName("");
-              setError(null);
-            }}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
-          >
-            ↩ New File
-          </button>
+          <div className="flex items-center gap-2">
+            <StatsUploadButton onStatsLoaded={setPlayerStats} />
+            <button
+              onClick={() => {
+                setPlayer(null);
+                setFileName("");
+                setError(null);
+                setPlayerStats(null);
+              }}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+            >
+              ↩ New File
+            </button>
+          </div>
         </div>
       </header>
 
@@ -83,6 +125,7 @@ export default function Home() {
         )}
 
         {/* Two-column layout: left = player + inventory, right = location + effects + abilities */}
+        {player && (
         <div className="grid gap-4 lg:grid-cols-3">
           {/* Left column */}
           <div className="space-y-4 lg:col-span-2">
@@ -102,9 +145,10 @@ export default function Home() {
             <AbilitiesCard player={player} />
           </div>
         </div>
+        )}
 
         {/* Attributes full-width */}
-        {player.attributes && player.attributes.length > 0 && (
+        {player && player.attributes && player.attributes.length > 0 && (
           <div className="mc-card space-y-3">
             <h3 className="font-minecraft text-sm text-yellow-400">📊 Attributes</h3>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -124,6 +168,24 @@ export default function Home() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Stats panel — shown when a stats JSON file has been loaded */}
+        {playerStats ? (
+          <StatsPanel stats={playerStats} />
+        ) : (
+          <div className="rounded-xl border border-dashed border-gray-800 px-4 py-5 text-center text-xs text-gray-600">
+            📈 Player statistics (blocks mined, kills, playtime…) are stored separately in{" "}
+            <span className="font-mono text-gray-500">world/stats/&lt;uuid&gt;.json</span> — not in the
+            playerdata file.{" "}
+            <button
+              className="text-yellow-600 underline hover:text-yellow-400 transition-colors"
+              onClick={() => document.querySelector<HTMLButtonElement>('[title="Load player statistics from world/stats/<uuid>.json"]')?.click()}
+            >
+              Load it now
+            </button>{" "}
+            to see stats here.
           </div>
         )}
 

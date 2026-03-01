@@ -358,6 +358,33 @@ function buildLegacyGiveCommand(item: InventoryItem, playerName: string): string
   return `/give ${target} ${id} ${count}`;
 }
 
+// ─── Command-block wrappers ───────────────────────────────────────────────────
+// Escapes a /give command so it can be nested inside an NBT string value.
+function escapeForNBTString(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+// 1.21.11+: short component keys, no "minecraft:" prefix on block_entity_data key
+function buildCommandBlockGiveNew(giveCmd: string, playerName: string): string {
+  const target = playerName.trim() || "@p";
+  const esc = escapeForNBTString(giveCmd);
+  return `/give ${target} minecraft:command_block[block_entity_data={id:"minecraft:command_block",Command:"${esc}"}] 1`;
+}
+
+// 1.20.5–1.21.10: full namespaced component key
+function buildCommandBlockGiveMid(giveCmd: string, playerName: string): string {
+  const target = playerName.trim() || "@p";
+  const esc = escapeForNBTString(giveCmd);
+  return `/give ${target} minecraft:command_block[minecraft:block_entity_data={id:"minecraft:command_block",Command:"${esc}"}] 1`;
+}
+
+// Legacy (pre-1.20.5): BlockEntityTag NBT
+function buildCommandBlockGiveLegacy(giveCmd: string, playerName: string): string {
+  const target = playerName.trim() || "@p";
+  const esc = escapeForNBTString(giveCmd);
+  return `/give ${target} minecraft:command_block 1 0 {BlockEntityTag:{Command:"${esc}"}}`;
+}
+
 // ─── Image with fallback ──────────────────────────────────────────────────────
 
 function ItemModalImage({ id, emoji }: { id: string; emoji: string }) {
@@ -412,6 +439,14 @@ export default function ItemModal({ item, onClose }: ItemModalProps) {
   const cmdMid = buildGiveCommandMid(item, playerName);
   const legacyCmd = buildLegacyGiveCommand(item, playerName);
   const hasComponents = !!(item.rawNBT && getCompound(item.rawNBT, "components"));
+
+  // Command block variants (for commands that exceed the 256-char chat limit)
+  const CHAT_LIMIT = 256;
+  const showCommandBlock =
+    cmdNew.length > CHAT_LIMIT || cmdMid.length > CHAT_LIMIT || legacyCmd.length > CHAT_LIMIT;
+  const cbCmdNew = buildCommandBlockGiveNew(cmdNew, playerName);
+  const cbCmdMid = buildCommandBlockGiveMid(cmdMid, playerName);
+  const cbCmdLegacy = buildCommandBlockGiveLegacy(legacyCmd, playerName);
 
   return (
     /* Backdrop */
@@ -556,6 +591,77 @@ export default function ItemModal({ item, onClose }: ItemModalProps) {
                 </button>
               </div>
             </div>
+
+            {/* Command-block variants — shown when any command exceeds 256-char chat limit */}
+            {showCommandBlock && (
+              <div className="space-y-3 rounded-xl border border-orange-800/60 bg-orange-950/30 p-3">
+                <div className="flex items-start gap-2">
+                  <span className="text-base">📦</span>
+                  <div>
+                    <p className="text-xs font-semibold text-orange-300">
+                      Command too long for chat ({Math.max(cmdNew.length, cmdMid.length, legacyCmd.length)} / 256 chars)
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Run one of these from the <span className="text-gray-300">server console</span> (no length limit) to place a pre-filled command block in your inventory. Then place and activate it.
+                    </p>
+                  </div>
+                </div>
+
+                {/* CB 1.21.11+ */}
+                <div>
+                  <p className="mb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Command Block · 1.21.11+
+                  </p>
+                  <div className="flex items-stretch gap-0 overflow-hidden rounded-lg border border-gray-700">
+                    <code className="flex-1 overflow-x-auto whitespace-nowrap bg-gray-900 px-3 py-2.5 font-mono text-xs text-green-300">
+                      {cbCmdNew}
+                    </code>
+                    <button
+                      onClick={() => copy(cbCmdNew, "cb-new")}
+                      className="flex-shrink-0 border-l border-gray-700 bg-gray-800 px-3 text-xs text-gray-400 transition-colors hover:bg-gray-700 hover:text-white"
+                    >
+                      {copied === "cb-new" ? "✓ Copied!" : "📋 Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* CB 1.20.5–1.21.10 */}
+                <div>
+                  <p className="mb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Command Block · 1.20.5 – 1.21.10
+                  </p>
+                  <div className="flex items-stretch gap-0 overflow-hidden rounded-lg border border-gray-700">
+                    <code className="flex-1 overflow-x-auto whitespace-nowrap bg-gray-900 px-3 py-2.5 font-mono text-xs text-sky-300">
+                      {cbCmdMid}
+                    </code>
+                    <button
+                      onClick={() => copy(cbCmdMid, "cb-mid")}
+                      className="flex-shrink-0 border-l border-gray-700 bg-gray-800 px-3 text-xs text-gray-400 transition-colors hover:bg-gray-700 hover:text-white"
+                    >
+                      {copied === "cb-mid" ? "✓ Copied!" : "📋 Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* CB Legacy */}
+                <div>
+                  <p className="mb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Command Block · Legacy (pre-1.20.5)
+                  </p>
+                  <div className="flex items-stretch gap-0 overflow-hidden rounded-lg border border-gray-700">
+                    <code className="flex-1 overflow-x-auto whitespace-nowrap bg-gray-900 px-3 py-2.5 font-mono text-xs text-blue-300">
+                      {cbCmdLegacy}
+                    </code>
+                    <button
+                      onClick={() => copy(cbCmdLegacy, "cb-legacy")}
+                      className="flex-shrink-0 border-l border-gray-700 bg-gray-800 px-3 text-xs text-gray-400 transition-colors hover:bg-gray-700 hover:text-white"
+                    >
+                      {copied === "cb-legacy" ? "✓ Copied!" : "📋 Copy"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
