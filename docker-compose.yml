@@ -1,0 +1,9 @@
+services:
+  nbt-viewer:
+    image: ghcr.io/pixo2000/nbt-viewer:latest
+    container_name: nbt-viewer
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
